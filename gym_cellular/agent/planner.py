@@ -1,0 +1,150 @@
+import numpy as np
+from abc import ABC, abstractmethod
+
+from gym_cellular.cellular.forest_fire import ForestFire
+
+
+class WorldModel(ABC):
+    """
+    Abstract interface for a world model that, given the current grid
+    state (2D np.ndarray), predicts the next grid state (2D np.ndarray).
+    """
+
+    @abstractmethod
+    def predict(self, state: np.ndarray) -> np.ndarray:
+        """
+        Given a 2D array `state` of shape (H, W), return a new 2D array of
+        the same shape representing the next time step under this model.
+        """
+        pass
+
+
+class OracleWorldModel(WorldModel):
+    """
+    “Perfect” world‐model: wraps an actual CellularAutomaton instance.
+    On each predict(state) call, it overwrites the automaton’s internal
+    state and runs `step()`, returning the true next state.
+    """
+
+    def __init__(self, automaton):
+        """
+        `automaton` must be a freshly created CellularAutomaton (e.g. GameOfLife or ForestFire),
+        whose width/height match the environment. We will never call its constructor again—
+        but each predict() call will do `set_state(state)` then `step()`.
+        """
+        # We assume `automaton` has methods: set_state(np.ndarray), step(), and get_state().
+        self.automaton = automaton
+
+    def predict(self, state: np.ndarray) -> np.ndarray:
+        # Overwrite internal automaton state, then step(), then return its new state.
+        self.automaton.set_state(state)
+        self.automaton.step()
+        return self.automaton.get_state()
+
+
+class StaticWorldModel(WorldModel):
+    """
+    “Naïve” world‐model: assumes the grid never changes.
+    predict(state) → return a copy of `state` itself.
+    """
+
+    def predict(self, state: np.ndarray) -> np.ndarray:
+        return state.copy()
+
+
+class PlanningAgent:
+    """
+    A depth‐d tree‐search agent for the HelicopterEnv.  At each decision step,
+    it knows the current grid (2D np.ndarray of integers), the current agent_pos
+    (y, x), and a `WorldModel` (which can predict grid → next grid).  It chooses
+    the action (0–7) whose resulting “look‐ahead” (up to depth d) yields the
+    maximum total count of cells == 1 (“trees”) at the leaf nodes.
+
+    Usage:
+        agent = PlanningAgent(depth=d, world_model=some_model, height=H, width=W)
+        action = agent.select_action(current_grid, (agent_y, agent_x))
+    """
+
+    def __init__(self, depth: int, world_model: WorldModel, height: int, width: int):
+        self.depth = depth
+        self.model = world_model
+        self.height = height
+        self.width = width
+
+        self.directions = [
+            (-1, 0),  # N
+            (0, 1),  # E
+            (1, 0),  # S
+            (0, -1),  # W
+        ]
+
+    def select_action(self, state: np.ndarray, agent_pos: tuple[int, int]) -> int:
+        """
+        Given the current `state` (2D array) and `agent_pos = (y, x)`,
+        return the best action ∈ {0,...,3} by doing a depth‐d look‐ahead
+        and maximizing the final count of cells == 1.
+        """
+        best_action = 0
+        best_score = -1
+
+        for action in range(4):
+            score = self._search(
+                state.copy(),
+                agent_pos,
+                action,
+                depth_remaining=self.depth
+            )
+            if score > best_score:
+                best_score = score
+                best_action = action
+
+        return best_action
+
+    def _search(
+            self,
+            grid: np.ndarray,
+            pos: tuple[int, int],
+            action: int,
+            depth_remaining: int
+    ) -> int:
+        """
+        Recursively simulate:
+          1) Move agent from pos using `action` (with wrap‐around).
+          2) If the agent “lands” on a fire (states 2,3,4), set that cell → 1.
+          3) Call `self.model.predict(...)` on the modified grid to get next_grid.
+          4) If depth_remaining == 1, return (# of cells == 1 in next_grid).
+             Else, for each next_action ∈ {0..7}, recurse with:
+                 pos = new_pos, grid = next_grid, action = next_action,
+                 depth_remaining = depth_remaining - 1
+             and return the maximum leaf‐score among those branches.
+        """
+        y, x = pos
+        dy, dx = self.directions[action]
+
+        cell_val = grid[y, x]
+        if cell_val in (ForestFire.FIRE_1, ForestFire.FIRE_2, ForestFire.FIRE_3):
+            grid[y, x] = ForestFire.EMPTY
+
+        new_y = max(0, min(self.height - 1, y + dy))
+        new_x = max(0, min(self.width - 1, x + dx))
+
+        next_grid = self.model.predict(grid)
+
+        # TODO: for robustness, we could sum all values along the search path (not just take the last one)
+        if depth_remaining == 1:
+            # leaf: count how many 1s in next_grid
+            return int(np.sum(next_grid == 1))
+
+        # Otherwise, try all 4 possible next actions
+        best_leaf = -1
+        for a2 in range(4):
+            val = self._search(
+                next_grid.copy(),
+                (new_y, new_x),
+                a2,
+                depth_remaining=depth_remaining - 1,
+            )
+            if val > best_leaf:
+                best_leaf = val
+
+        return best_leaf

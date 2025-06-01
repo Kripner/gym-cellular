@@ -25,6 +25,14 @@ class CellularAutomaton(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def possible_states(self) -> list[int]:
+        """
+        Return a list of all integer values that cells can take in this CA.
+        For example, GameOfLife returns [0,1]; ForestFire returns [0,1,2,3,4,5].
+        """
+        pass
+
     def get_state(self) -> np.ndarray:
         """
         Returns the current state of the grid as a 2D numpy array.
@@ -37,3 +45,10 @@ class CellularAutomaton(abc.ABC):
         """
         assert new_state.shape == (self.height, self.width)
         self.state = new_state.copy()
+
+    @abc.abstractmethod
+    def reset(self):
+        """
+        Reset the automaton to its initial state.
+        """
+        pass

@@ -32,7 +32,7 @@ class AbstractCellularEnv(Env, abc.ABC):
 
         self.render_mode = render_mode
         self.window = None
-        self.cell_size = 10  # pixels
+        self.cell_size = 500 / max(self.width, self.height)
 
     @abc.abstractmethod
     def _get_reward(self) -> float:
@@ -63,10 +63,9 @@ class AbstractCellularEnv(Env, abc.ABC):
         pass
 
     def step(self, action):
-        # Move agent according to action
         self._move_agent(action)
-        # Advance automaton
         self.automaton.step()
+
         obs = self.automaton.get_state()
         reward = self._get_reward()
         terminated = self._get_terminated()
@@ -78,10 +77,7 @@ class AbstractCellularEnv(Env, abc.ABC):
         # Optionally, reseed automaton or environment. For simplicity, reset automaton state randomly.
         if seed is not None:
             np.random.seed(seed)
-        # If automaton supports random init, reinitialize
-        if hasattr(self.automaton, 'state'):
-            # Randomize state
-            self.automaton.state = np.random.randint(2, size=(self.height, self.width), dtype=np.uint8)
+        self.automaton.reset()
         # Reset agent position in concrete
         self._reset_agent()
         obs = self.automaton.get_state()
@@ -105,17 +101,18 @@ class AbstractCellularEnv(Env, abc.ABC):
         # Draw grid
         surface = pygame.Surface(self.window.get_size())
         surface.fill((0, 0, 0))  # black background
-        state = self.automaton.get_state()
+        grid = self.automaton.get_state()
         for y in range(self.height):
             for x in range(self.width):
-                if state[y, x] == 1:
-                    rect = pygame.Rect(
-                        x * self.cell_size,
-                        y * self.cell_size,
-                        self.cell_size,
-                        self.cell_size
-                    )
-                    pygame.draw.rect(surface, (255, 255, 255), rect)  # white for alive cells
+                cell_val = int(grid[y, x])
+                color = self.state_colors.get(cell_val, (0, 0, 0))
+                rect = pygame.Rect(
+                    x * self.cell_size,
+                    y * self.cell_size,
+                    self.cell_size,
+                    self.cell_size
+                )
+                pygame.draw.rect(surface, color, rect)
         # Draw agent
         self._render_agent(surface)
         # Blit to window

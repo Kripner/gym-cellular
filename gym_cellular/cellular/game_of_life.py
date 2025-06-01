@@ -44,3 +44,9 @@ class GameOfLife(CellularAutomaton):
                     else:
                         new_state[y, x] = 0
         self.state = new_state
+
+    def possible_states(self) -> list[int]:
+       """
+       In Game of Life, cells can only be 0 (dead) or 1 (alive).
+       """
+       return [0, 1]
