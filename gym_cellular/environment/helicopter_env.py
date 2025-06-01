@@ -23,7 +23,7 @@ class HelicopterEnv(AbstractCellularEnv):
     The helicopter moves one cell in the chosen direction each step (with wrap-around).
     """
 
-    def __init__(self, width=10, height=10, render_mode=None, max_steps=100):
+    def __init__(self, width=10, height=10, render_mode=None, max_steps=100, seed=0):
         automaton = ForestFire(width, height)
         super().__init__(automaton, render_mode)
         # Override action and observation spaces
@@ -48,6 +48,8 @@ class HelicopterEnv(AbstractCellularEnv):
             self.automaton.ROCK: (105, 105, 105)
         }
 
+        self.rng = np.random.RandomState(seed)
+
     def _reset_agent(self):
         # Place helicopter at center
         self.agent_pos = np.array([self.height // 2, self.width // 2], dtype=int)
@@ -56,9 +58,10 @@ class HelicopterEnv(AbstractCellularEnv):
 
     def _create_random_fire(self):
         """Create a fire at a random tree location."""
-        valid_positions = [(y, x) for y in range(self.height) for x in range(self.width) if self.automaton.state[y, x] == self.automaton.TREE]
+        valid_positions = [(y, x) for y in range(self.height) for x in range(self.width) if
+                           self.automaton.state[y, x] == self.automaton.TREE]
         if valid_positions:
-            y, x = valid_positions[np.random.randint(len(valid_positions))]
+            y, x = valid_positions[self.rng.randint(len(valid_positions))]
             self.automaton.state[y, x] = self.automaton.FIRE_1
 
     def _move_agent(self, action: int):
@@ -67,14 +70,12 @@ class HelicopterEnv(AbstractCellularEnv):
         if cell_val in (self.automaton.FIRE_1, self.automaton.FIRE_2, self.automaton.FIRE_3):
             self.automaton.state[y, x] = self.automaton.EMPTY
 
-        directions = [(-1, 0),  # North
-                      (-1, 1),  # Northeast
-                      (0, 1),  # East
-                      (1, 1),  # Southeast
-                      (1, 0),  # South
-                      (1, -1),  # Southwest
-                      (0, -1),  # West
-                      (-1, -1)]  # Northwest
+        directions = [
+            (-1, 0),  # North
+            (0, 1),  # East
+            (1, 0),  # South
+            (0, -1),  # West
+        ]  # Northwest
         dy, dx = directions[action]
         new_y = max(0, min(self.height - 1, y + dy))
         new_x = max(0, min(self.width - 1, x + dx))

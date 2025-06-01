@@ -3,11 +3,16 @@ import argparse
 import os
 import csv
 from pathlib import Path
+import random
+import json
+import re
+import datetime
 
 import numpy as np
 import pygame
 import gymnasium as gym
 
+from gym_cellular.cellular.forest_fire import ForestFire
 from gym_cellular.agent.planner import (
     OracleWorldModel,
     StaticWorldModel,
@@ -15,57 +20,31 @@ from gym_cellular.agent.planner import (
 )
 from gym_cellular.environment.helicopter_env import HelicopterEnv
 
+
 def get_parser():
-    parser = argparse.ArgumentParser(
-        description="Evaluate depth‐d planning agent on HelicopterEnv."
-    )
-    parser.add_argument(
-        "--env_id",
-        type=str,
-        default="HelicopterCellularAutomaton-v0",
-        help="Registered Gymnasium ID of the environment to evaluate."
-    )
-    parser.add_argument(
-        "--depth",
-        type=int,
-        default=3,
-        help="Depth of tree search for the PlanningAgent."
-    )
-    parser.add_argument(
-        "--model_type",
-        type=str,
-        choices=["oracle", "static"],
-        default="oracle",
-        help="Whether to use the OracleWorldModel or StaticWorldModel."
-    )
-    parser.add_argument(
-        "--n_runs",
-        type=int,
-        default=5,
-        help="Number of independent episodes to average over."
-    )
-    parser.add_argument(
-        "--render_mode",
-        type=str,
-        choices=["human", "rgb_array", "none"],
-        default="none",
-        help="gym.make render_mode to pass to the environment."
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=Path,
-        default="out",
-        help="Directory to write per-run metrics (CSV) and summary."
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--env_id", type=str, default="HelicopterCellularAutomaton-v0")
+    parser.add_argument("--depth", type=int, default=5, help="Depth of tree search for the PlanningAgent.")
+    parser.add_argument("--world_model", type=str, choices=["oracle", "static"], default="oracle")
+    parser.add_argument("--n_runs", type=int, default=5, help="Number of independent episodes to average over.")
+    parser.add_argument("--render_mode", type=str, choices=["human", "rgb_array", "none"], default="none")
+    parser.add_argument("--base_dir", type=Path, default="out")
+    parser.add_argument("--seed", type=int, default=0)
 
     return parser
+
+
+ARGS_WHITELIST = [
+    "depth", "world_model", "n_runs", "seed",
+]
 
 
 def run_one_episode(
         env_id: str,
         depth: int,
-        model_type: str,
+        world_model: str,
         render_mode: str,
+        seed: int,
 ) -> int:
     """
     Runs a single episode in `env_id` using a depth‐d planning agent
@@ -73,7 +52,7 @@ def run_one_episode(
     count of cells == 1 (“trees”) at episode end.
     """
     # Create env via gym.make → this also registers and returns a HelicopterEnv
-    env = gym.make(env_id, render_mode=render_mode)
+    env = gym.make(env_id, render_mode=render_mode, seed=seed)
     obs, _ = env.reset()
 
     # We need direct access to the underlying HelicopterEnv instance to grab:
@@ -85,7 +64,7 @@ def run_one_episode(
     width = wrapped.width
 
     # Build the chosen world model:
-    if model_type == "oracle":
+    if world_model == "oracle":
         # Build a fresh automaton of the same class and dims:
         base_auto = wrapped.automaton
         automaton_cls = base_auto.__class__
@@ -97,10 +76,12 @@ def run_one_episode(
         world_model = StaticWorldModel()
 
     # Instantiate the planner:
-    planner = PlanningAgent(depth=depth,
-                            world_model=world_model,
-                            height=height,
-                            width=width)
+    planner = PlanningAgent(
+        depth=depth,
+        world_model=world_model,
+        height=height,
+        width=width,
+    )
 
     terminated = False
     truncated = False
@@ -110,6 +91,7 @@ def run_one_episode(
         wrapped.render()
 
     while not (terminated or truncated):
+        # TODO: instead, we should use the observation from the environment
         current_grid = wrapped.automaton.get_state()
         agent_pos = tuple(wrapped.agent_pos)
 
@@ -125,7 +107,7 @@ def run_one_episode(
 
     # At episode end, count how many “trees” (state==1) remain
     final_grid = wrapped.automaton.get_state()
-    final_trees = int(np.sum(final_grid == 1))
+    final_trees = int(np.sum(final_grid == ForestFire.TREE))
 
     env.close()
     if render_mode == "human":
@@ -134,9 +116,74 @@ def run_one_episode(
     return final_trees
 
 
+def get_args_descriptor(
+        args_ns: argparse.Namespace,
+        param_whitelist: list[str] | None = None,
+        include_slurm_id=True,
+        include_time=True,
+) -> str:
+    args = vars(args_ns)
+    if include_time:
+        descriptor = datetime.datetime.now().strftime("%y-%m-%d_%H%M%S")
+    else:
+        descriptor = ""
+
+    if include_slurm_id and "SLURM_JOB_ID" in os.environ:
+        if len(descriptor) > 0:
+            descriptor += "-"
+        descriptor += f"id={os.environ['SLURM_JOB_ID']}"
+
+    visible_args = {k: v for k, v in sorted(args.items())}
+    if param_whitelist is not None:
+        visible_args = {k: v for k, v in visible_args.items() if k in param_whitelist}
+
+    def format_value(v: str) -> str:
+        if isinstance(v, Path) or "/" in str(v):
+            v = str(v)
+            if v.endswith("/"):
+                v = v[:-1]
+            parts = [p for p in v.split("/") if len(p) != 0]
+            return "_".join([v[:50] for v in parts[-2:]])
+        if isinstance(v, str):
+            return v.replace("<", "").replace(">", "")
+        return str(v)
+
+    if len(visible_args) > 0:
+        if len(descriptor) > 0:
+            descriptor += "-"
+        descriptor += ",".join((
+            "{}={}".format(re.sub("(.)[^_]*_?", r"\1", k), format_value(v))
+            for k, v in visible_args.items()
+        ))
+
+    assert len(descriptor) > 0
+    return descriptor
+
+
+def dump_args(args, logdir):
+    path = os.path.join(logdir, "args.json")
+    with open(path, "w") as f:
+        data = {k: str(v) for k, v in args.__dict__.items()}
+        json.dump(data, f, indent=4, sort_keys=True)
+        f.write("\n")
+
+
+def setup_seeds(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+
+
 def main(args: argparse.Namespace):
-    os.makedirs(args.output_dir, exist_ok=True)
-    csv_path = os.path.join(args.output_dir, "results.csv")
+    setup_seeds(args.seed)
+
+    descriptor = get_args_descriptor(args, param_whitelist=set(ARGS_WHITELIST))
+    log_dir = args.base_dir / descriptor
+    log_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Logging to {log_dir}")
+    dump_args(args, log_dir)
+
+    os.makedirs(log_dir, exist_ok=True)
+    csv_path = log_dir / "results.csv"
 
     # Header: run_index, final_tree_count
     with open(csv_path, mode="w", newline="") as csvfile:
@@ -148,18 +195,19 @@ def main(args: argparse.Namespace):
             final_count = run_one_episode(
                 env_id=args.env_id,
                 depth=args.depth,
-                model_type=args.model_type,
-                render_mode=args.render_mode
+                world_model=args.world_model,
+                render_mode=args.render_mode,
+                seed=args.seed,
             )
             writer.writerow([run_idx, final_count])
             totals.append(final_count)
             print(f"Run {run_idx}/{args.n_runs} → final trees = {final_count}")
 
         average_trees = sum(totals) / len(totals)
-        summary_path = os.path.join(args.output_dir, "summary.txt")
+        summary_path = log_dir / "summary.txt"
         with open(summary_path, mode="w") as f:
             f.write(f"Depth = {args.depth}\n")
-            f.write(f"Model = {args.model_type}\n")
+            f.write(f"Model = {args.world_model}\n")
             f.write(f"n_runs = {args.n_runs}\n")
             f.write(f"Average final trees = {average_trees:.2f}\n")
 

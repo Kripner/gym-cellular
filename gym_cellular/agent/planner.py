@@ -65,11 +65,12 @@ class PlanningAgent:
         action = agent.select_action(current_grid, (agent_y, agent_x))
     """
 
-    def __init__(self, depth: int, world_model: WorldModel, height: int, width: int):
+    def __init__(self, depth: int, world_model: WorldModel, height: int, width: int, seed: int = 0):
         self.depth = depth
         self.model = world_model
         self.height = height
         self.width = width
+        self.rng = np.random.RandomState(seed)
 
         self.directions = [
             (-1, 0),  # N
@@ -84,67 +85,48 @@ class PlanningAgent:
         return the best action ∈ {0,...,3} by doing a depth‐d look‐ahead
         and maximizing the final count of cells == 1.
         """
-        best_action = 0
-        best_score = -1
-
-        for action in range(4):
-            score = self._search(
-                state.copy(),
-                agent_pos,
-                action,
-                depth_remaining=self.depth
-            )
-            if score > best_score:
-                best_score = score
-                best_action = action
-
+        best_action, _ = self._search(state, agent_pos, self.depth)
         return best_action
 
     def _search(
             self,
             grid: np.ndarray,
             pos: tuple[int, int],
-            action: int,
-            depth_remaining: int
-    ) -> int:
-        """
-        Recursively simulate:
-          1) Move agent from pos using `action` (with wrap‐around).
-          2) If the agent “lands” on a fire (states 2,3,4), set that cell → 1.
-          3) Call `self.model.predict(...)` on the modified grid to get next_grid.
-          4) If depth_remaining == 1, return (# of cells == 1 in next_grid).
-             Else, for each next_action ∈ {0..7}, recurse with:
-                 pos = new_pos, grid = next_grid, action = next_action,
-                 depth_remaining = depth_remaining - 1
-             and return the maximum leaf‐score among those branches.
-        """
-        y, x = pos
-        dy, dx = self.directions[action]
+            depth_remaining: int,
+    ) -> tuple[int | None, int]:
+        assert depth_remaining >= 0
+        # TODO: for robustness, we could sum all values along the search path (not just take the last one)
+        if depth_remaining == 0:
+            count_trees = int(np.sum(grid == ForestFire.TREE))
 
+            fire_positions = [(y, x) for y in range(grid.shape[0]) for x in range(grid.shape[1]) 
+                             if grid[y, x] in (ForestFire.FIRE_1, ForestFire.FIRE_2, ForestFire.FIRE_3)]
+            if fire_positions:
+                min_fire_distance = min(abs(pos[0] - fy) + abs(pos[1] - fx) for fy, fx in fire_positions)
+                proximity_bonus = max(0, 10 - min_fire_distance)  # Bonus decreases with distance
+                return None, count_trees + proximity_bonus
+            return None, count_trees
+
+        y, x = pos
         cell_val = grid[y, x]
         if cell_val in (ForestFire.FIRE_1, ForestFire.FIRE_2, ForestFire.FIRE_3):
             grid[y, x] = ForestFire.EMPTY
 
-        new_y = max(0, min(self.height - 1, y + dy))
-        new_x = max(0, min(self.width - 1, x + dx))
-
         next_grid = self.model.predict(grid)
 
-        # TODO: for robustness, we could sum all values along the search path (not just take the last one)
-        if depth_remaining == 1:
-            # leaf: count how many 1s in next_grid
-            return int(np.sum(next_grid == 1))
+        best_action, best_score = None, None
+        for action in self.rng.permutation(4):
+            dy, dx = self.directions[action]
+            new_y = max(0, min(self.height - 1, y + dy))
+            new_x = max(0, min(self.width - 1, x + dx))
 
-        # Otherwise, try all 4 possible next actions
-        best_leaf = -1
-        for a2 in range(4):
-            val = self._search(
+            _, score = self._search(
                 next_grid.copy(),
                 (new_y, new_x),
-                a2,
-                depth_remaining=depth_remaining - 1,
+                depth_remaining - 1,
             )
-            if val > best_leaf:
-                best_leaf = val
+            if best_score is None or score > best_score:
+                best_score = score
+                best_action = action
 
-        return best_leaf
+        return best_action, best_score
