@@ -1,14 +1,6 @@
 import numpy as np
 from .automaton import CellularAutomaton
 
-# We’ll encode the six possible states as integers:
-#   0 = empty
-#   1 = tree
-#   2 = fire_1
-#   3 = fire_2
-#   4 = fire_3
-#   5 = rock
-
 class ForestFire(CellularAutomaton):
     """
     Forest-Fire cellular automaton with the following discrete states:

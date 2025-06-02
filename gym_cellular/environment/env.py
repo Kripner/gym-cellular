@@ -22,20 +22,12 @@ class AbstractCellularEnv(Env, abc.ABC):
         self.width = automaton.width
         self.height = automaton.height
 
-        # Placeholder spaces; concrete envs should override
-        self.action_space = spaces.Discrete(1)
-        self.observation_space = spaces.Box(
-            low=0, high=1,
-            shape=(self.height, self.width),
-            dtype=np.uint8
-        )
-
         self.render_mode = render_mode
         self.window = None
         self.cell_size = 500 / max(self.width, self.height)
 
     @abc.abstractmethod
-    def _get_reward(self) -> float:
+    def _get_reward(self, env, old_state: np.ndarray, new_state: np.ndarray) -> float:
         """
         Compute and return the reward for the current state.
         """
@@ -62,12 +54,21 @@ class AbstractCellularEnv(Env, abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def _get_observation(self) -> np.ndarray:
+        """
+        Get the observation of the current state.
+        """
+        pass
+
     def step(self, action):
+        old_state = self.automaton.get_state()
         self._move_agent(action)
         self.automaton.step()
+        new_state = self.automaton.get_state()
 
-        obs = self.automaton.get_state()
-        reward = self._get_reward()
+        obs = self._get_observation()
+        reward = self._get_reward(old_state, new_state)
         terminated = self._get_terminated()
         info = self._get_info()
         return obs, reward, terminated, False, info
@@ -80,7 +81,7 @@ class AbstractCellularEnv(Env, abc.ABC):
         self.automaton.reset()
         # Reset agent position in concrete
         self._reset_agent()
-        obs = self.automaton.get_state()
+        obs = self._get_observation()
         return obs, {}
 
     @abc.abstractmethod

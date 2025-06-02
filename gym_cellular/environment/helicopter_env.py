@@ -10,15 +10,11 @@ class HelicopterEnv(AbstractCellularEnv):
     """
     Environment with a helicopter agent moving on a game-of-life grid.
 
-    Actions: 0-7 correspond to 8 directions:
+    Actions: 0-3 correspond to 4 directions:
       0: North
-      1: Northeast
-      2: East
-      3: Southeast
-      4: South
-      5: Southwest
-      6: West
-      7: Northwest
+      1: East
+      2: South
+      3: West
 
     The helicopter moves one cell in the chosen direction each step (with wrap-around).
     """
@@ -26,13 +22,22 @@ class HelicopterEnv(AbstractCellularEnv):
     def __init__(self, width=10, height=10, render_mode=None, max_steps=100, seed=0):
         automaton = ForestFire(width, height)
         super().__init__(automaton, render_mode)
-        # Override action and observation spaces
-        self.action_space = spaces.Discrete(8)
-        self.observation_space = spaces.Box(
-            low=0, high=1,
-            shape=(self.height, self.width),
-            dtype=np.uint8
-        )
+        
+        self.observation_space = spaces.Dict({
+            'grid': spaces.Box(
+                low=0, high=5,  # Values 0-5 for the 6 possible cell states
+                shape=(self.height, self.width),
+                dtype=np.uint8
+            ),
+            'position': spaces.Box(
+                low=np.array([0, 0]), 
+                high=np.array([self.height-1, self.width-1]),
+                shape=(2,),
+                dtype=np.int32
+            )
+        })
+        self.action_space = spaces.Discrete(4)
+        
         # Agent position
         self.agent_pos = np.array([self.height // 2, self.width // 2], dtype=int)
         # Step counter
@@ -45,7 +50,7 @@ class HelicopterEnv(AbstractCellularEnv):
             self.automaton.FIRE_1: (255, 165, 0),
             self.automaton.FIRE_2: (255, 69, 0),
             self.automaton.FIRE_3: (255, 0, 0),
-            self.automaton.ROCK: (105, 105, 105)
+            self.automaton.ROCK: (105, 105, 105),
         }
 
         self.rng = np.random.RandomState(seed)
@@ -82,27 +87,36 @@ class HelicopterEnv(AbstractCellularEnv):
         self.agent_pos = np.array([new_y, new_x], dtype=int)
         self.step_count += 1
 
-    def _get_reward(self) -> float:
-        # Example reward: +1 if helicopter lands on a live cell, else 0
-        y, x = self.agent_pos
-        if self.automaton.state[y, x] == 1:
-            return 1.0
-        return 0.0
+    def _get_reward(self, old_state: np.ndarray, new_state: np.ndarray) -> float:
+        num_trees_new = (new_state == self.automaton.TREE).sum()
+        num_trees_old = (old_state == self.automaton.TREE).sum()
+        return float(num_trees_new - num_trees_old)
 
+    def _get_observation(self) -> dict:
+        """
+        Return a dict: {'grid': np.ndarray of the automaton state, 'position': np.ndarray of shape (2,) with (y, x)}
+        """
+        grid = self.automaton.get_state()
+        position = self.agent_pos.copy()
+        return {'grid': grid, 'position': position}
+
+    # TODO: we should use truncation, not termination (maybe?)
     def _get_terminated(self) -> bool:
         # Episode ends after max_steps
         return self.step_count >= self.max_steps
 
     def _get_info(self) -> dict:
-        return {"agent_pos": tuple(self.agent_pos)}
+        return {"position": tuple(self.agent_pos)}
 
     def _render_agent(self, surface: pygame.Surface):
-        # Draw helicopter as a red square
+        # Draw helicopter as a blue triangle
         y, x = self.agent_pos
-        rect = pygame.Rect(
-            x * self.cell_size,
-            y * self.cell_size,
-            self.cell_size,
-            self.cell_size
-        )
-        pygame.draw.rect(surface, (255, 0, 0), rect)  # red for helicopter
+        cx = x * self.cell_size
+        cy = y * self.cell_size
+        size = self.cell_size
+
+        # Draw an upward-pointing blue triangle centered in the cell
+        point1 = (cx + size // 2, cy)  # top center
+        point2 = (cx, cy + size)       # bottom left
+        point3 = (cx + size, cy + size)  # bottom right
+        pygame.draw.polygon(surface, (0, 0, 255), [point1, point2, point3])  # blue for helicopter

@@ -11,13 +11,12 @@ class WorldModel(ABC):
     """
 
     @abstractmethod
-    def predict(self, state: np.ndarray) -> np.ndarray:
+    def predict(self, state: dict) -> np.ndarray:
         """
         Given a 2D array `state` of shape (H, W), return a new 2D array of
         the same shape representing the next time step under this model.
         """
         pass
-
 
 class OracleWorldModel(WorldModel):
     """
@@ -35,21 +34,25 @@ class OracleWorldModel(WorldModel):
         # We assume `automaton` has methods: set_state(np.ndarray), step(), and get_state().
         self.automaton = automaton
 
-    def predict(self, state: np.ndarray) -> np.ndarray:
-        # Overwrite internal automaton state, then step(), then return its new state.
-        self.automaton.set_state(state)
+    def predict(self, state: dict) -> np.ndarray:
+        new_grid = state["grid"].copy()
+        y, x = state["position"]
+        cell_val = state["grid"][y, x]
+        if cell_val in (ForestFire.FIRE_1, ForestFire.FIRE_2, ForestFire.FIRE_3):
+            new_grid[y, x] = ForestFire.EMPTY
+
+        self.automaton.set_state(new_grid)
         self.automaton.step()
         return self.automaton.get_state()
 
-
 class StaticWorldModel(WorldModel):
     """
-    “Naïve” world‐model: assumes the grid never changes.
+    “Naive” world‐model: assumes the grid never changes.
     predict(state) → return a copy of `state` itself.
     """
 
-    def predict(self, state: np.ndarray) -> np.ndarray:
-        return state.copy()
+    def predict(self, state: dict) -> np.ndarray:
+        return state["grid"].copy()
 
 
 class PlanningAgent:
@@ -107,15 +110,14 @@ class PlanningAgent:
                 return None, count_trees + proximity_bonus
             return None, count_trees
 
-        y, x = pos
-        cell_val = grid[y, x]
-        if cell_val in (ForestFire.FIRE_1, ForestFire.FIRE_2, ForestFire.FIRE_3):
-            grid[y, x] = ForestFire.EMPTY
-
-        next_grid = self.model.predict(grid)
+        next_grid = self.model.predict({
+            "grid": grid,
+            "position": pos,
+        })
 
         best_action, best_score = None, None
         for action in self.rng.permutation(4):
+            y, x = pos
             dy, dx = self.directions[action]
             new_y = max(0, min(self.height - 1, y + dy))
             new_x = max(0, min(self.width - 1, x + dx))
