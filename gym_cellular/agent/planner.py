@@ -123,7 +123,7 @@ class PlanningAgent:
             new_x = max(0, min(self.width - 1, x + dx))
 
             _, score = self._search(
-                next_grid.copy(),
+                next_grid,
                 (new_y, new_x),
                 depth_remaining - 1,
             )

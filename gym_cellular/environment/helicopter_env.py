@@ -69,18 +69,33 @@ class HelicopterEnv(AbstractCellularEnv):
             y, x = valid_positions[self.rng.randint(len(valid_positions))]
             self.automaton.state[y, x] = self.automaton.FIRE_1
 
-    def _move_agent(self, action: int):
-        y, x = self.agent_pos
-        cell_val = self.automaton.state[y, x]
-        if cell_val in (self.automaton.FIRE_1, self.automaton.FIRE_2, self.automaton.FIRE_3):
-            self.automaton.state[y, x] = self.automaton.EMPTY
+    def step(self, action):
+        old_state = self.automaton.get_state()
+        extinguish_fire = self.automaton.state[self.agent_pos[0], self.agent_pos[1]] in (self.automaton.FIRE_1, self.automaton.FIRE_2, self.automaton.FIRE_3)
+        if extinguish_fire:
+            self.automaton.state[self.agent_pos[0], self.agent_pos[1]] = self.automaton.EMPTY
+        self.automaton.step()
+        if extinguish_fire:
+            # Prevent e.g. tree from growing in the same frame.
+            self.automaton.state[self.agent_pos[0], self.agent_pos[1]] = self.automaton.EMPTY
+        new_state = self.automaton.get_state()
 
+        self._move_agent(action)
+
+        obs = self._get_observation()
+        reward = self._get_reward(old_state, new_state)
+        terminated = self._get_terminated()
+        info = self._get_info()
+        return obs, reward, terminated, False, info
+
+    def _move_agent(self, action: int):
         directions = [
             (-1, 0),  # North
             (0, 1),  # East
             (1, 0),  # South
             (0, -1),  # West
         ]  # Northwest
+        y, x = self.agent_pos
         dy, dx = directions[action]
         new_y = max(0, min(self.height - 1, y + dy))
         new_x = max(0, min(self.width - 1, x + dx))

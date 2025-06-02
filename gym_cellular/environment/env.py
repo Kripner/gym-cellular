@@ -27,52 +27,18 @@ class AbstractCellularEnv(Env, abc.ABC):
         self.cell_size = 500 / max(self.width, self.height)
 
     @abc.abstractmethod
-    def _get_reward(self, env, old_state: np.ndarray, new_state: np.ndarray) -> float:
-        """
-        Compute and return the reward for the current state.
-        """
-        pass
-
-    @abc.abstractmethod
-    def _get_terminated(self) -> bool:
-        """
-        Determine whether the episode is terminated.
-        """
-        pass
-
-    @abc.abstractmethod
-    def _get_info(self) -> dict:
-        """
-        Return any additional info.
-        """
-        pass
-
-    @abc.abstractmethod
-    def _move_agent(self, action: int):
-        """
-        Move the agent (e.g., helicopter) based on the action.
-        """
-        pass
-
-    @abc.abstractmethod
-    def _get_observation(self) -> np.ndarray:
+    def _get_observation(self) -> dict:
         """
         Get the observation of the current state.
         """
         pass
 
+    @abc.abstractmethod
     def step(self, action):
-        old_state = self.automaton.get_state()
-        self._move_agent(action)
-        self.automaton.step()
-        new_state = self.automaton.get_state()
-
-        obs = self._get_observation()
-        reward = self._get_reward(old_state, new_state)
-        terminated = self._get_terminated()
-        info = self._get_info()
-        return obs, reward, terminated, False, info
-        # Note: Gymnasium expects (obs, reward, terminated, truncated, info)
+        """
+        Take a step in the environment.
+        """
+        pass
 
     def reset(self, seed=None, options=None):
         # Optionally, reseed automaton or environment. For simplicity, reset automaton state randomly.
