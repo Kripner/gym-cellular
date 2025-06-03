@@ -27,7 +27,7 @@ class HelicopterEnv(AbstractCellularEnv):
             'grid': spaces.Box(
                 low=0, high=5,  # Values 0-5 for the 6 possible cell states
                 shape=(self.height, self.width),
-                dtype=np.uint8
+                dtype=np.int32
             ),
             'position': spaces.Box(
                 low=np.array([0, 0]), 
@@ -111,8 +111,8 @@ class HelicopterEnv(AbstractCellularEnv):
         """
         Return a dict: {'grid': np.ndarray of the automaton state, 'position': np.ndarray of shape (2,) with (y, x)}
         """
-        grid = self.automaton.get_state()
-        position = self.agent_pos.copy()
+        grid = self.automaton.get_state().astype(np.int32)
+        position = self.agent_pos.astype(np.int32)
         return {'grid': grid, 'position': position}
 
     # TODO: we should use truncation, not termination (maybe?)
