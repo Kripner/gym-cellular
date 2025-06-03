@@ -53,7 +53,6 @@ class HelicopterEnv(AbstractCellularEnv):
             self.automaton.ROCK: (105, 105, 105),
         }
 
-        print(f"Initializing with seed {seed}")
         self.rng = np.random.RandomState(seed)
 
     def _reset_agent(self):
@@ -68,7 +67,6 @@ class HelicopterEnv(AbstractCellularEnv):
                            self.automaton.state[y, x] == self.automaton.TREE]
         assert len(valid_positions) > 0, "No tree positions found for setting fire."
         y, x = valid_positions[self.rng.randint(len(valid_positions))]
-        print(f"Creating fire at {y}, {x}")
         self.automaton.state[y, x] = self.automaton.FIRE_1
 
     def step(self, action):
