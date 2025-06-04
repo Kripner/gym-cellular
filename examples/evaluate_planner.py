@@ -7,6 +7,7 @@ import random
 import json
 import re
 import datetime
+import time
 
 import numpy as np
 import pygame
@@ -90,13 +91,18 @@ def run_one_episode(
     if render_mode == "human":
         wrapped.render()
 
+    agent_time = 0
+    agent_interactions = 0
+
     while not (terminated or truncated):
         # TODO: instead, we should use the observation from the environment
         current_grid = wrapped.automaton.get_state()
         agent_pos = tuple(wrapped.agent_pos)
 
-        # Ask planner for the best action
+        start_time = time.time()
         action = planner.select_action(current_grid, agent_pos)
+        agent_time += time.time() - start_time
+        agent_interactions += 1
 
         obs, reward, terminated, truncated, _ = env.step(action)
 
@@ -112,6 +118,8 @@ def run_one_episode(
     env.close()
     if render_mode == "human":
         pygame.quit()
+
+    print(f"Agent time: {agent_time:.2f}s (avg {agent_time / agent_interactions:.2f}s per interaction)")
 
     return final_trees
 
@@ -191,13 +199,14 @@ def main(args: argparse.Namespace):
         writer.writerow(["run_index", "final_trees"])
 
         totals = []
+        rng = np.random.RandomState(args.seed)
         for run_idx in range(1, args.n_runs + 1):
             final_count = run_one_episode(
                 env_id=args.env_id,
                 depth=args.depth,
                 world_model=args.world_model,
                 render_mode=args.render_mode,
-                seed=args.seed,
+                seed=rng.randint(0, 2**32),
             )
             writer.writerow([run_idx, final_count])
             totals.append(final_count)

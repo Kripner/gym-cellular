@@ -12,7 +12,7 @@ class AbstractCellularEnv(Env, abc.ABC):
     Expects a CellularAutomaton instance to be passed in.
     Defines interface for reward(), terminated(), and update(action).
     """
-    metadata = {"render_modes": ["human"], "render_fps": 5}
+    metadata = {"render_modes": ["human", "none"], "render_fps": 5}
 
     def __init__(self,
                  automaton: CellularAutomaton,

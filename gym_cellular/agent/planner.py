@@ -85,8 +85,8 @@ class PlanningAgent:
     def select_action(self, state: np.ndarray, agent_pos: tuple[int, int]) -> int:
         """
         Given the current `state` (2D array) and `agent_pos = (y, x)`,
-        return the best action ∈ {0,...,3} by doing a depth‐d look‐ahead
-        and maximizing the final count of cells == 1.
+        return the best action ∈ {0,...,3} by doing a depth-d look‐ahead
+        and maximizing the cumulative reward.
         """
         best_action, _ = self._search(state, agent_pos, self.depth, 0)
         return best_action
@@ -99,11 +99,11 @@ class PlanningAgent:
             total_reward: int,
     ) -> tuple[int | None, int]:
         assert depth_remaining >= 0
-        total_reward += int(np.sum(grid == ForestFire.TREE))
-        # TODO: for robustness, we could sum all values along the search path (not just take the last one)
         if depth_remaining == 0:
-            fire_positions = [(y, x) for y in range(grid.shape[0]) for x in range(grid.shape[1]) 
-                             if grid[y, x] in (ForestFire.FIRE_1, ForestFire.FIRE_2, ForestFire.FIRE_3)]
+            fire_positions = [
+                (y, x) for y in range(grid.shape[0]) for x in range(grid.shape[1]) 
+                if grid[y, x] in (ForestFire.FIRE_1, ForestFire.FIRE_2, ForestFire.FIRE_3)
+            ]
             if fire_positions:
                 min_fire_distance = min(abs(pos[0] - fy) + abs(pos[1] - fx) for fy, fx in fire_positions)
                 proximity_bonus = max(0, 10 - min_fire_distance)
@@ -114,6 +114,7 @@ class PlanningAgent:
             "grid": grid,
             "position": pos,
         })
+        total_reward += int(np.sum(next_grid == ForestFire.TREE))
 
         best_action, best_score = None, None
         for action in self.rng.permutation(4):

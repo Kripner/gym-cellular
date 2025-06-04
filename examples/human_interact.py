@@ -12,6 +12,7 @@ def main():
     # First render() will call pygame.init() and open the window.
     env.render()
 
+    total_reward = 0
     while running:
         action = None
         for event in pygame.event.get():
@@ -21,20 +22,21 @@ def main():
                 if event.key == pygame.K_UP:
                     action = 0  # North
                 elif event.key == pygame.K_RIGHT:
-                    action = 2  # East
+                    action = 1  # East
                 elif event.key == pygame.K_DOWN:
-                    action = 4  # South
+                    action = 2  # South
                 elif event.key == pygame.K_LEFT:
-                    action = 6  # West
+                    action = 3  # West
 
         if action is not None:
             obs, reward, terminated, truncated, info = env.step(action)
             env.render()
             if terminated or truncated:
                 running = False
-
+            total_reward += reward
         clock.tick(10)  # Limit to 10 FPS
 
+    print(f"Total reward: {total_reward}")
     env.close()
 
 if __name__ == '__main__':

@@ -63,8 +63,15 @@ class HelicopterEnv(AbstractCellularEnv):
 
     def _create_random_fire(self):
         """Create a fire at a random tree location."""
-        valid_positions = [(y, x) for y in range(self.height) for x in range(self.width) if
-                           self.automaton.state[y, x] == self.automaton.TREE]
+        valid_positions = [
+            (y, x)
+            for y in range(self.height) for x in range(self.width)
+            if (
+                self.automaton.state[y, x] == self.automaton.TREE and
+                # Distance from center (ie. the helicopter) must be at least 3 to prevent it from being too easy.
+                abs(y - (self.height // 2)) + abs(x - (self.width // 2)) >= 3
+            )
+        ]
         assert len(valid_positions) > 0, "No tree positions found for setting fire."
         y, x = valid_positions[self.rng.randint(len(valid_positions))]
         self.automaton.state[y, x] = self.automaton.FIRE_1
@@ -78,12 +85,11 @@ class HelicopterEnv(AbstractCellularEnv):
         if extinguish_fire:
             # Prevent e.g. tree from growing in the same frame.
             self.automaton.state[self.agent_pos[0], self.agent_pos[1]] = self.automaton.EMPTY
-        new_state = self.automaton.get_state()
 
         self._move_agent(action)
 
         obs = self._get_observation()
-        reward = self._get_reward(old_state, new_state)
+        reward = self._get_reward()
         terminated = self._get_terminated()
         info = self._get_info()
         return obs, reward, terminated, False, info
@@ -102,10 +108,10 @@ class HelicopterEnv(AbstractCellularEnv):
         self.agent_pos = np.array([new_y, new_x], dtype=int)
         self.step_count += 1
 
-    def _get_reward(self, old_state: np.ndarray, new_state: np.ndarray) -> float:
-        num_trees_new = (new_state == self.automaton.TREE).sum()
-        num_trees_old = (old_state == self.automaton.TREE).sum()
-        return float(num_trees_new - num_trees_old)
+    def _get_reward(self) -> float:
+        state = self.automaton.get_state()
+        num_trees = (state == self.automaton.TREE).sum()
+        return float(num_trees)
 
     def _get_observation(self) -> dict:
         """
