@@ -111,7 +111,7 @@ class HelicopterEnv(AbstractCellularEnv):
     def _get_reward(self) -> float:
         state = self.automaton.get_state()
         num_trees = (state == self.automaton.TREE).sum()
-        return float(num_trees)
+        return float(num_trees) / 100.0
 
     def _get_observation(self) -> dict:
         """
