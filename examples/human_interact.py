@@ -1,10 +1,17 @@
+import argparse
+
 import gymnasium as gym
 import pygame
 
 import gym_cellular
 
-def main():
-    env = gym.make('HelicopterCellularAutomaton-v0', render_mode='human')
+def get_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--seed', type=int, default=0)
+    return parser
+
+def main(args: argparse.Namespace):
+    env = gym.make('HelicopterCellularAutomaton-v0', render_mode='human', seed=args.seed)
     obs, _ = env.reset()
     running = True
     clock = pygame.time.Clock()
@@ -40,4 +47,4 @@ def main():
     env.close()
 
 if __name__ == '__main__':
-    main()
+    main(get_parser().parse_args())

@@ -68,8 +68,8 @@ class HelicopterEnv(AbstractCellularEnv):
             for y in range(self.height) for x in range(self.width)
             if (
                 self.automaton.state[y, x] == self.automaton.TREE and
-                # Distance from center (ie. the helicopter) must be at least 3 to prevent it from being too easy.
-                abs(y - (self.height // 2)) + abs(x - (self.width // 2)) >= 3
+                # Distance from center (ie. the helicopter) must be at least 5 to prevent it from being too easy.
+                abs(y - (self.height // 2)) + abs(x - (self.width // 2)) >= 5
             )
         ]
         assert len(valid_positions) > 0, "No tree positions found for setting fire."
