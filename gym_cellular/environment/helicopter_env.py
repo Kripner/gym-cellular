@@ -77,7 +77,6 @@ class HelicopterEnv(AbstractCellularEnv):
         self.automaton.state[y, x] = self.automaton.FIRE_1
 
     def step(self, action):
-        old_state = self.automaton.get_state()
         extinguish_fire = self.automaton.state[self.agent_pos[0], self.agent_pos[1]] in (self.automaton.FIRE_1, self.automaton.FIRE_2, self.automaton.FIRE_3)
         if extinguish_fire:
             self.automaton.state[self.agent_pos[0], self.agent_pos[1]] = self.automaton.EMPTY

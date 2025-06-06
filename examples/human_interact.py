@@ -2,16 +2,18 @@ import argparse
 
 import gymnasium as gym
 import pygame
+import numpy as np
 
 import gym_cellular
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--num_episodes', type=int, default=5)
     return parser
 
-def main(args: argparse.Namespace):
-    env = gym.make('HelicopterCellularAutomaton-v0', render_mode='human', seed=args.seed)
+def run_episode(seed: int) -> float:
+    env = gym.make('HelicopterCellularAutomaton-v0', render_mode='human', seed=seed)
     obs, _ = env.reset()
     running = True
     clock = pygame.time.Clock()
@@ -45,6 +47,23 @@ def main(args: argparse.Namespace):
 
     print(f"Total reward: {total_reward}")
     env.close()
+
+    return total_reward
+
+def main(args: argparse.Namespace):
+    rng = np.random.default_rng(args.seed)
+    rewards = []
+    while True:
+        seed = rng.integers(0, 1000000)
+        reward = run_episode(seed)
+        rewards.append(reward)
+
+        print(f"Reward: {reward}")
+        print(f"Mean reward: {np.mean(rewards)}, std: {np.std(rewards)}")
+        print("-")
+        if len(rewards) >= args.num_episodes:
+            break
+    print(f"All rewards: [{",".join([str(r) for r in rewards])}]")
 
 if __name__ == '__main__':
     main(get_parser().parse_args())
