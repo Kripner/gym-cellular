@@ -1,6 +1,7 @@
 import abc
 import numpy as np
 import pygame
+import os
 from gymnasium import Env, spaces
 
 from gym_cellular.cellular.automaton import CellularAutomaton
@@ -86,6 +87,29 @@ class AbstractCellularEnv(Env, abc.ABC):
         self.window.blit(surface, (0, 0))
         pygame.display.flip()
         pygame.time.Clock().tick(self.metadata.get("render_fps", 5))
+
+    def save_frame(self, filename="frame.png"):
+        """
+        Save the current frame to a file.
+        
+        Args:
+            filename (str): The name of the file to save to. Default is 'frame.png'.
+        """
+        if self.window is None:
+            # Render a frame if window doesn't exist
+            self.render()
+            if self.render_mode != "human" or self.window is None:
+                print("Cannot save frame: rendering is disabled or failed")
+                return False
+                
+        # Create output directory if it doesn't exist
+        os.makedirs(os.path.dirname(filename) if os.path.dirname(filename) else '.', exist_ok=True)
+        
+        # Get the surface from the window and save it
+        surface = pygame.Surface(self.window.get_size())
+        surface.blit(self.window, (0, 0))
+        pygame.image.save(surface, filename)
+        return True
 
     def close(self):
         if self.window is not None:

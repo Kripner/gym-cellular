@@ -1,4 +1,6 @@
 import argparse
+from pathlib import Path
+import json
 
 import gymnasium as gym
 import pygame
@@ -10,10 +12,12 @@ def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--num_episodes', type=int, default=5)
+    parser.add_argument('--experience_path', type=Path)
     return parser
 
-def run_episode(seed: int) -> float:
+def run_episode(seed: int, experience_path: Path | None) -> float:
     env = gym.make('HelicopterCellularAutomaton-v0', render_mode='human', seed=seed)
+
     obs, _ = env.reset()
     running = True
     clock = pygame.time.Clock()
@@ -22,6 +26,7 @@ def run_episode(seed: int) -> float:
     env.render()
 
     total_reward = 0
+    history = []
     while running:
         action = None
         for event in pygame.event.get():
@@ -39,11 +44,25 @@ def run_episode(seed: int) -> float:
 
         if action is not None:
             obs, reward, terminated, truncated, info = env.step(action)
+            history.append({
+                "obs": {
+                    "grid": obs["grid"].tolist(),
+                    "position": obs["position"].tolist(),
+                },
+                "action": action,
+                "reward": float(reward),
+                "terminated": terminated,
+                "truncated": truncated,
+            })
             env.render()
             if terminated or truncated:
                 running = False
             total_reward += reward
         clock.tick(10)  # Limit to 10 FPS
+
+    if experience_path is not None:
+        with open(experience_path, "a") as f:
+            f.write(json.dumps(history) + "\n")
 
     print(f"Total reward: {total_reward}")
     env.close()
@@ -55,7 +74,7 @@ def main(args: argparse.Namespace):
     rewards = []
     while True:
         seed = rng.integers(0, 1000000)
-        reward = run_episode(seed)
+        reward = run_episode(seed, args.experience_path)
         rewards.append(reward)
 
         print(f"Reward: {reward}")
